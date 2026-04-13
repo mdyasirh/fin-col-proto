@@ -43,21 +43,18 @@
             <div><span data-en="Planned Hours" data-de="Sollstunden">Sollstunden</span>: <strong id="plannedHours">{{ planned_monthly }}</strong> h</div>
             <div><span data-en="Actual Hours" data-de="Iststunden">Iststunden</span>: <strong id="actualHours">{{ actual_monthly }}</strong> h</div>
             <div><span data-en="Deviation" data-de="Abweichung">Abweichung</span>: <strong id="deltaHours">{% if monthly_delta > 0 %}+{% endif %}{{ monthly_delta }}</strong> h</div>
-            <div class="mt-2"><span data-en="Planned/day" data-de="Geplant/Tag">Geplant/Tag</span>: <strong id="plannedDayHours">-</strong> h</div>
-            <div><span data-en="Working days/week" data-de="Arbeitstage/Woche">Arbeitstage/Woche</span>: <strong id="plannedDaysWeek">-</strong></div>
+            <div class="mt-2"><span data-en="Planned/day" data-de="Geplant/Tag">Geplant/Tag</span>: <strong id="plannedDayHours">8.00</strong> h</div>
+            <div><span data-en="Working days/week" data-de="Arbeitstage/Woche">Arbeitstage/Woche</span>: <strong id="plannedDaysWeek">5</strong></div>
           </div>
           <small id="deltaLabel" class="mt-2 d-block"></small>
         </div>
       </div>
     </div>
 
-    <!-- Status Area -->
     <div id="statusArea" class="text-center mb-4"></div>
 
-    <!-- Action Buttons -->
     <div id="actionButtons" class="text-center mb-5"></div>
 
-    <!-- Summary Card (shown after clocking out) -->
     <div id="summaryCard" class="card p-4 mb-4" style="display:none;">
       <h5 data-en="Today's Summary" data-de="Tagesübersicht">Tagesübersicht</h5>
       <table class="table table-dark table-sm">
@@ -68,7 +65,6 @@
       </table>
     </div>
 
-    <!-- Today's Completed Shifts -->
     {% if today_records %}
     <h5 class="mt-3 mb-2" data-en="Today's Completed Shifts" data-de="Heutige abgeschlossene Schichten">Heutige abgeschlossene Schichten</h5>
     <div class="table-responsive mb-3">
@@ -95,7 +91,6 @@
     </div>
     {% endif %}
 
-    <!-- Weekly Overview -->
     <h4 class="mt-4 mb-3" data-en="Weekly Overview" data-de="Wochenübersicht">Wochenübersicht</h4>
     <div class="table-responsive">
       <table class="table table-dark table-striped table-hover">
@@ -151,32 +146,6 @@
   </div>
 </div>
 
-<div class="modal fade" id="planSetupModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content bg-dark text-light border-secondary">
-      <div class="modal-header border-secondary">
-        <h5 class="modal-title" data-en="Set Daily Planning" data-de="Tagesplanung festlegen">Tagesplanung festlegen</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <label class="form-label" data-en="Planned hours per day" data-de="Geplante Stunden pro Tag">Geplante Stunden pro Tag</label>
-          <input type="number" step="0.25" min="1" max="16" id="planDailyHoursInput" class="form-control bg-dark text-light border-secondary" value="8">
-        </div>
-        <div class="mb-2">
-          <label class="form-label" data-en="Working days per week" data-de="Arbeitstage pro Woche">Arbeitstage pro Woche</label>
-          <input type="number" step="1" min="1" max="7" id="planDaysInput" class="form-control bg-dark text-light border-secondary" value="5">
-        </div>
-      </div>
-      <div class="modal-footer border-secondary">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-en="Cancel" data-de="Abbrechen">Abbrechen</button>
-        <button type="button" class="btn btn-primary" onclick="savePlanAndStart()" data-en="Save & Start" data-de="Speichern & Starten">Speichern & Starten</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Edit/Correction Modal -->
 <div class="modal fade" id="editModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content bg-dark text-light">
@@ -211,7 +180,6 @@
   </div>
 </div>
 
-<!-- Confirmation Overlay (used for clock-out and delete) -->
 <div id="confirmOverlay" class="confirm-overlay" style="display:none;">
   <div class="confirm-box">
     <h5 id="confirmTitle" class="mb-3"></h5>
@@ -226,73 +194,57 @@
 
 {% block extra_js %}
 <script>
-const CSRF = '{{ csrf_token }}';
-const initialStatus = '{{ record.status|default:"NONE" }}';
-const initialClockIn = '{{ record.clock_in|date:"H:i"|default:"" }}';
-const initialClockInIso = '{{ record.clock_in|date:"c"|default:"" }}';
-const initialBreakStartIso = '{{ record.break_start|date:"c"|default:"" }}';
-const initialBreakMinutes = Number('{{ record.total_break_minutes|default:"0" }}') || 0;
-let activeClockInIso = initialClockInIso;
-let activeBreakStartIso = initialBreakStartIso;
-let accumulatedBreakMinutes = initialBreakMinutes;
-let accumulatedBreakSeconds = initialBreakMinutes * 60;
-let currentState = initialStatus || 'NONE';
-let shiftTimerInterval = null;
-let pendingStartAfterPlan = false;
-let planSetupModalInstance = null;
-let pausedWorkedSeconds = null;
+var CSRF = '{{ csrf_token }}';
+var initialStatus = '{{ record.status|default:"NONE" }}';
+var initialClockIn = '{{ record.clock_in|date:"H:i"|default:"" }}';
+var initialClockInIso = '{{ record.clock_in|date:"c"|default:"" }}';
+var initialBreakStartIso = '{{ record.break_start|date:"c"|default:"" }}';
+var initialBreakMinutes = Number('{{ record.total_break_minutes|default:"0" }}') || 0;
+var CONTRACT_DAILY_HOURS = 8;
+var CONTRACT_DAYS_WEEK = 5;
 
-document.addEventListener('DOMContentLoaded', () => {
+var activeClockInIso = initialClockInIso;
+var activeBreakStartIso = initialBreakStartIso;
+var accumulatedBreakMinutes = initialBreakMinutes;
+var accumulatedBreakSeconds = initialBreakMinutes * 60;
+var currentState = initialStatus || 'NONE';
+var shiftTimerInterval = null;
+var pausedWorkedSeconds = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('plannedDayHours').textContent = CONTRACT_DAILY_HOURS.toFixed(2);
+  document.getElementById('plannedDaysWeek').textContent = String(CONTRACT_DAYS_WEEK);
   applyPlanDeviationStyle();
-  loadPlanningDefaults();
   setupOfflineSync();
   renderState(initialStatus, initialClockIn);
 });
 
-function getPlanStorageKey() {
-  const today = new Date().toISOString().slice(0, 10);
-  return `fitlife_plan_${today}`;
-}
-
-function loadPlanningDefaults() {
-  const key = getPlanStorageKey();
-  const raw = localStorage.getItem(key);
-  if (!raw) return;
-  try {
-    const data = JSON.parse(raw);
-    const daily = Number(data.planned_daily_hours || 0);
-    const days = Number(data.planned_days_week || 0);
-    if (daily > 0) document.getElementById('plannedDayHours').textContent = daily.toFixed(2);
-    if (days > 0) document.getElementById('plannedDaysWeek').textContent = String(days);
-  } catch (_) {}
-}
-
 function getPlannedDaySeconds() {
-  const value = Number(document.getElementById('plannedDayHours').textContent || '0');
-  return Math.max(0, Math.floor(value * 3600));
+  return Math.max(0, Math.floor(CONTRACT_DAILY_HOURS * 3600));
 }
 
-function getWorkedSeconds(now = new Date()) {
+function getWorkedSeconds(now) {
+  if (!now) now = new Date();
   if (!activeClockInIso) return 0;
-  const started = new Date(activeClockInIso);
-  let elapsedSeconds = Math.floor((now - started) / 1000);
-  const breakSeconds = Math.floor(accumulatedBreakSeconds);
+  var started = new Date(activeClockInIso);
+  var elapsedSeconds = Math.floor((now - started) / 1000);
+  var breakSecs = Math.floor(accumulatedBreakSeconds);
   if (currentState === 'ON_BREAK' && activeBreakStartIso) {
-    const breakNow = Math.max(0, Math.floor((now - new Date(activeBreakStartIso)) / 1000));
-    elapsedSeconds -= (breakSeconds + breakNow);
+    var breakNow = Math.max(0, Math.floor((now - new Date(activeBreakStartIso)) / 1000));
+    elapsedSeconds -= (breakSecs + breakNow);
   } else {
-    elapsedSeconds -= breakSeconds;
+    elapsedSeconds -= breakSecs;
   }
   return Math.max(0, elapsedSeconds);
 }
 
 function applyPlanDeviationStyle() {
-  const deltaEl = document.getElementById('deltaHours');
-  const card = document.getElementById('planCard');
-  const label = document.getElementById('deltaLabel');
-  const lang = localStorage.getItem('lang') || 'de';
-  const raw = (deltaEl?.textContent || '0').replace('+', '').replace(',', '.');
-  const delta = Number(raw) || 0;
+  var deltaEl = document.getElementById('deltaHours');
+  var card = document.getElementById('planCard');
+  var label = document.getElementById('deltaLabel');
+  var lang = localStorage.getItem('lang') || 'de';
+  var raw = (deltaEl ? deltaEl.textContent : '0').replace('+', '').replace(',', '.');
+  var delta = Number(raw) || 0;
   card.classList.remove('border-danger', 'border-warning', 'border-success');
   if (delta < -5) {
     card.classList.add('border-danger');
@@ -310,28 +262,31 @@ function applyPlanDeviationStyle() {
 }
 
 function formatHms(totalSeconds) {
-  const safe = Math.max(0, Math.floor(totalSeconds));
-  const hours = String(Math.floor(safe / 3600)).padStart(2, '0');
-  const mins = String(Math.floor((safe % 3600) / 60)).padStart(2, '0');
-  const secs = String(safe % 60).padStart(2, '0');
-  return `${hours}:${mins}:${secs}`;
+  var safe = Math.max(0, Math.floor(totalSeconds));
+  var hours = String(Math.floor(safe / 3600)).padStart(2, '0');
+  var mins = String(Math.floor((safe % 3600) / 60)).padStart(2, '0');
+  var secs = String(safe % 60).padStart(2, '0');
+  return hours + ':' + mins + ':' + secs;
 }
 
 function updateDigitalClock() {
-  const clockEl = document.getElementById('digitalClock');
-  const remainingEl = document.getElementById('remainingClock');
+  var clockEl = document.getElementById('digitalClock');
+  var remainingEl = document.getElementById('remainingClock');
   if (!clockEl) return;
   if (!activeClockInIso || currentState === 'NONE' || currentState === 'CLOCKED_OUT') {
     clockEl.textContent = '00:00:00';
     if (remainingEl) remainingEl.textContent = formatHms(getPlannedDaySeconds());
     return;
   }
-  const worked = currentState === 'ON_BREAK' && pausedWorkedSeconds !== null
-    ? pausedWorkedSeconds
-    : getWorkedSeconds(new Date());
+  var worked;
+  if (currentState === 'ON_BREAK' && pausedWorkedSeconds !== null) {
+    worked = pausedWorkedSeconds;
+  } else {
+    worked = getWorkedSeconds(new Date());
+  }
   clockEl.textContent = formatHms(worked);
   if (remainingEl) {
-    const remaining = Math.max(0, getPlannedDaySeconds() - worked);
+    var remaining = Math.max(0, getPlannedDaySeconds() - worked);
     remainingEl.textContent = formatHms(remaining);
   }
 }
@@ -350,31 +305,34 @@ function stopShiftTimer() {
 }
 
 function setupOfflineSync() {
-  const offlineBanner = document.getElementById('offlineBanner');
-  const queueKey = 'fitlife_pending_punches';
+  var offlineBanner = document.getElementById('offlineBanner');
+  var queueKey = 'fitlife_pending_punches';
   if (!navigator.onLine) offlineBanner.classList.remove('d-none');
-  window.addEventListener('offline', () => offlineBanner.classList.remove('d-none'));
-  window.addEventListener('online', async () => {
+  window.addEventListener('offline', function() { offlineBanner.classList.remove('d-none'); });
+  window.addEventListener('online', function() {
     offlineBanner.classList.add('d-none');
-    const queue = JSON.parse(localStorage.getItem(queueKey) || '[]');
+    var queue = JSON.parse(localStorage.getItem(queueKey) || '[]');
     if (queue.length === 0) return;
-    for (const item of queue) {
-      await doPunch(item.action, true);
-    }
-    localStorage.removeItem(queueKey);
-    setTimeout(() => location.reload(), 600);
+    var chain = Promise.resolve();
+    queue.forEach(function(item) {
+      chain = chain.then(function() { return doPunch(item.action, true); });
+    });
+    chain.then(function() {
+      localStorage.removeItem(queueKey);
+      setTimeout(function() { location.reload(); }, 600);
+    });
   });
 }
 
 function renderState(status, clockIn) {
-  const statusArea = document.getElementById('statusArea');
-  const actionBtns = document.getElementById('actionButtons');
-  const summaryCard = document.getElementById('summaryCard');
+  var statusArea = document.getElementById('statusArea');
+  var actionBtns = document.getElementById('actionButtons');
+  var summaryCard = document.getElementById('summaryCard');
   currentState = status || 'NONE';
   summaryCard.style.display = 'none';
 
-  const lang = localStorage.getItem('lang') || 'de';
-  const t = {
+  var lang = localStorage.getItem('lang') || 'de';
+  var t = {
     notClockedIn: lang === 'de' ? 'Noch nicht eingestempelt' : 'Not clocked in yet',
     start: lang === 'de' ? 'Starten' : 'Start',
     working: lang === 'de' ? 'Derzeit am Arbeiten' : 'Currently working',
@@ -387,8 +345,8 @@ function renderState(status, clockIn) {
   };
 
   if (status === 'NONE' || status === '') {
-    statusArea.innerHTML = `<p class="text-muted fs-5">${t.notClockedIn}</p>`;
-    actionBtns.innerHTML = `<button class="btn btn-success btn-lg px-5 py-3 fs-3" onclick="prepareStartPunch()">${t.start}</button>`;
+    statusArea.innerHTML = '<p class="text-muted fs-5">' + t.notClockedIn + '</p>';
+    actionBtns.innerHTML = '<button class="btn btn-success btn-lg px-5 py-3 fs-3" onclick="doPunch(\'punch-in\')">' + t.start + '</button>';
     activeClockInIso = '';
     activeBreakStartIso = '';
     accumulatedBreakMinutes = 0;
@@ -397,18 +355,19 @@ function renderState(status, clockIn) {
     stopShiftTimer();
     updateDigitalClock();
   } else if (status === 'WORKING') {
-    statusArea.innerHTML = `<span id="workStatusBadge" class="badge bg-success badge-pulse fs-5 p-3">⏱ ${t.working} (${clockIn})</span>`;
-    actionBtns.innerHTML = `
-      <button class="btn btn-warning btn-lg me-3 px-4 py-2" onclick="doPunch('break-start')">${t.breakBtn}</button>
-      <button class="btn btn-danger btn-lg px-4 py-2" onclick="confirmClockOut()">${t.stop}</button>`;
+    var clockLabel = clockIn ? ' (' + clockIn + ')' : '';
+    statusArea.innerHTML = '<span id="workStatusBadge" class="badge bg-success badge-pulse fs-5 p-3">⏱ ' + t.working + clockLabel + '</span>';
+    actionBtns.innerHTML =
+      '<button class="btn btn-warning btn-lg me-3 px-4 py-2" onclick="doPunch(\'break-start\')">' + t.breakBtn + '</button>' +
+      '<button class="btn btn-danger btn-lg px-4 py-2" onclick="confirmClockOut()">' + t.stop + '</button>';
     startShiftTimer();
   } else if (status === 'ON_BREAK') {
-    statusArea.innerHTML = `<span id="workStatusBadge" class="badge bg-warning text-dark fs-5 p-3">☕ ${t.onBreak}</span>`;
-    actionBtns.innerHTML = `<button class="btn btn-primary btn-lg px-5 py-2" onclick="doPunch('break-end')">${t.resume}</button>`;
+    statusArea.innerHTML = '<span id="workStatusBadge" class="badge bg-warning text-dark fs-5 p-3">☕ ' + t.onBreak + '</span>';
+    actionBtns.innerHTML = '<button class="btn btn-primary btn-lg px-5 py-2" onclick="doPunch(\'break-end\')">' + t.resume + '</button>';
     startShiftTimer();
   } else if (status === 'CLOCKED_OUT') {
-    statusArea.innerHTML = `<span class="badge bg-secondary fs-5 p-3">${t.clockedOut}</span>`;
-    actionBtns.innerHTML = `<button class="btn btn-success btn-lg px-4 py-2 mt-3" onclick="prepareStartPunch()">${t.newShift}</button>`;
+    statusArea.innerHTML = '<span class="badge bg-secondary fs-5 p-3">' + t.clockedOut + '</span>';
+    actionBtns.innerHTML = '<button class="btn btn-success btn-lg px-4 py-2 mt-3" onclick="doPunch(\'punch-in\')">' + t.newShift + '</button>';
     summaryCard.style.display = 'block';
     pausedWorkedSeconds = null;
     stopShiftTimer();
@@ -416,59 +375,23 @@ function renderState(status, clockIn) {
   }
 }
 
-function prepareStartPunch() {
-  const daily = Number(document.getElementById('plannedDayHours').textContent || '0');
-  const days = Number(document.getElementById('plannedDaysWeek').textContent || '0');
-  if (daily > 0 && days > 0) {
-    doPunch('punch-in');
-    return;
-  }
-  if (!planSetupModalInstance) {
-    planSetupModalInstance = new bootstrap.Modal(document.getElementById('planSetupModal'));
-  }
-  pendingStartAfterPlan = true;
-  planSetupModalInstance.show();
-}
-
-function savePlanAndStart() {
-  const dailyHours = Number(document.getElementById('planDailyHoursInput').value || '0');
-  const daysWeek = Number(document.getElementById('planDaysInput').value || '0');
-  if (!(dailyHours > 0) || !(daysWeek > 0)) {
-    alert('Bitte gültige Planwerte eingeben.');
-    return;
-  }
-  localStorage.setItem(getPlanStorageKey(), JSON.stringify({
-    planned_daily_hours: dailyHours,
-    planned_days_week: daysWeek,
-  }));
-  document.getElementById('plannedDayHours').textContent = dailyHours.toFixed(2);
-  document.getElementById('plannedDaysWeek').textContent = String(daysWeek);
-  if (planSetupModalInstance) planSetupModalInstance.hide();
-  updateDigitalClock();
-  if (pendingStartAfterPlan) {
-    pendingStartAfterPlan = false;
-    doPunch('punch-in');
-  }
-}
-
-// Confirmation overlay for clock-out
 function confirmClockOut() {
-  const lang = localStorage.getItem('lang') || 'de';
+  var lang = localStorage.getItem('lang') || 'de';
   showConfirm(
     lang === 'de' ? 'Schicht beenden?' : 'End shift?',
     lang === 'de' ? 'Möchten Sie Ihre aktuelle Schicht wirklich beenden?' : 'Are you sure you want to clock out?',
-    () => doPunch('punch-out')
+    function() { doPunch('punch-out'); }
   );
 }
 
-let _confirmCallback = null;
+var _confirmCallback = null;
 function showConfirm(title, message, callback) {
   document.getElementById('confirmTitle').textContent = title;
   document.getElementById('confirmMessage').textContent = message;
   document.getElementById('confirmOverlay').style.display = 'flex';
   _confirmCallback = callback;
-  document.getElementById('confirmBtn').onclick = () => {
-    const cb = _confirmCallback;
+  document.getElementById('confirmBtn').onclick = function() {
+    var cb = _confirmCallback;
     hideConfirm();
     if (cb) cb();
   };
@@ -478,89 +401,74 @@ function hideConfirm() {
   _confirmCallback = null;
 }
 
-async function doPunch(action, fromOfflineQueue = false) {
-  const queueKey = 'fitlife_pending_punches';
-  const body = new URLSearchParams();
+function doPunch(action, fromOfflineQueue) {
+  var queueKey = 'fitlife_pending_punches';
+  var body = new URLSearchParams();
   if (action === 'punch-in') {
-    const nowIso = new Date().toISOString();
+    var nowIso = new Date().toISOString();
     body.append('clock_in', nowIso);
     if (!fromOfflineQueue) activeClockInIso = nowIso;
   }
   if (!navigator.onLine && !fromOfflineQueue) {
-    const queue = JSON.parse(localStorage.getItem(queueKey) || '[]');
+    var queue = JSON.parse(localStorage.getItem(queueKey) || '[]');
     queue.push({ action: action, queued_at: new Date().toISOString() });
     localStorage.setItem(queueKey, JSON.stringify(queue));
     document.getElementById('offlineBanner').classList.remove('d-none');
-    const lang = localStorage.getItem('lang') || 'de';
+    var lang = localStorage.getItem('lang') || 'de';
     showToast(lang === 'de' ? 'Offline: Aktion lokal gespeichert.' : 'Offline: action stored locally.');
-    return;
+    return Promise.resolve();
   }
-  let data;
-  try {
-    const resp = await fetch(`/api/${action}/`, {
-      method: 'POST',
-      headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body,
-    });
-    data = await resp.json();
-  } catch (error) {
+  return fetch('/api/' + action + '/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body,
+  }).then(function(resp) {
+    return resp.json();
+  }).then(function(data) {
+    if (!data.ok) { alert(data.error); return; }
+
+    if (data.clock_in) document.getElementById('sumClockIn').textContent = data.clock_in;
+    if (data.clock_out) document.getElementById('sumClockOut').textContent = data.clock_out;
+    if (data.break_min !== undefined) document.getElementById('sumBreak').textContent = data.break_min + ' min';
+    if (data.net_hours !== undefined && data.net_hours !== null) document.getElementById('sumNet').textContent = data.net_hours + ' h';
+    if (data.clock_in_iso) activeClockInIso = data.clock_in_iso;
+    if (data.break_min !== undefined) {
+      accumulatedBreakMinutes = Number(data.break_min) || 0;
+      accumulatedBreakSeconds = Math.max(accumulatedBreakSeconds, accumulatedBreakMinutes * 60);
+    }
+
+    var nextClockIn = data.clock_in || initialClockIn;
+
+    if (data.status === 'ON_BREAK') {
+      pausedWorkedSeconds = getWorkedSeconds(new Date());
+      activeBreakStartIso = new Date().toISOString();
+    } else if (data.status === 'WORKING' && currentState === 'ON_BREAK') {
+      if (activeBreakStartIso) {
+        var justEndedBreak = Math.max(0, Math.floor((new Date() - new Date(activeBreakStartIso)) / 1000));
+        accumulatedBreakSeconds += justEndedBreak;
+      }
+      activeBreakStartIso = '';
+      pausedWorkedSeconds = null;
+    }
+
+    renderState(data.status, nextClockIn);
+
+    if (data.status === 'CLOCKED_OUT') {
+      document.getElementById('summaryCard').style.display = 'block';
+      setTimeout(function() { location.reload(); }, 800);
+    }
+  }).catch(function(error) {
     if (!fromOfflineQueue) {
-      const queue = JSON.parse(localStorage.getItem(queueKey) || '[]');
-      queue.push({ action: action, queued_at: new Date().toISOString() });
-      localStorage.setItem(queueKey, JSON.stringify(queue));
+      var q = JSON.parse(localStorage.getItem(queueKey) || '[]');
+      q.push({ action: action, queued_at: new Date().toISOString() });
+      localStorage.setItem(queueKey, JSON.stringify(q));
       document.getElementById('offlineBanner').classList.remove('d-none');
       return;
     }
     throw error;
-  }
-  if (!data.ok) { alert(data.error); return; }
-
-  if (data.clock_in) document.getElementById('sumClockIn').textContent = data.clock_in;
-  if (data.clock_out) document.getElementById('sumClockOut').textContent = data.clock_out;
-  if (data.break_min !== undefined) document.getElementById('sumBreak').textContent = data.break_min + ' min';
-  if (data.net_hours !== undefined && data.net_hours !== null) document.getElementById('sumNet').textContent = data.net_hours + ' h';
-  if (data.clock_in_iso) activeClockInIso = data.clock_in_iso;
-  if (data.break_min !== undefined) {
-    accumulatedBreakMinutes = Number(data.break_min) || 0;
-    accumulatedBreakSeconds = Math.max(accumulatedBreakSeconds, accumulatedBreakMinutes * 60);
-  }
-
-  const nextClockIn = data.clock_in || initialClockIn;
-  renderState(data.status, nextClockIn);
-
-  if (data.status === 'CLOCKED_OUT') {
-    const actionBtns = document.getElementById('actionButtons');
-    actionBtns.querySelectorAll('button').forEach(btn => {
-      if ((btn.textContent || '').toLowerCase().includes('stop') || (btn.textContent || '').toLowerCase().includes('stopp')) {
-        btn.style.display = 'none';
-      }
-    });
-    document.getElementById('summaryCard').style.display = 'block';
-    setTimeout(() => location.reload(), 800);
-  } else if (data.status === 'ON_BREAK') {
-    pausedWorkedSeconds = getWorkedSeconds(new Date());
-    activeBreakStartIso = new Date().toISOString();
-    const badge = document.getElementById('workStatusBadge');
-    if (badge) {
-      badge.classList.remove('badge-pulse', 'bg-success');
-      badge.classList.add('bg-warning', 'text-dark');
-    }
-  } else if (data.status === 'WORKING') {
-    if (activeBreakStartIso) {
-      const justEndedBreak = Math.max(0, Math.floor((new Date() - new Date(activeBreakStartIso)) / 1000));
-      accumulatedBreakSeconds += justEndedBreak;
-    }
-    activeBreakStartIso = '';
-    pausedWorkedSeconds = null;
-    const badge = document.getElementById('workStatusBadge');
-    if (badge) {
-      badge.classList.remove('bg-warning', 'text-dark');
-      badge.classList.add('bg-success', 'badge-pulse');
-    }
-  }
+  });
 }
 
-// Edit modal for any record
 function showEditModal(recordId, clockIn, clockOut, breakMin) {
   document.getElementById('editRecordId').value = recordId;
   document.getElementById('editClockIn').value = clockIn || '';
@@ -570,20 +478,20 @@ function showEditModal(recordId, clockIn, clockOut, breakMin) {
   new bootstrap.Modal(document.getElementById('editModal')).show();
 }
 
-async function submitEditRequest() {
-  const recordId = document.getElementById('editRecordId').value;
-  const clockIn = document.getElementById('editClockIn').value;
-  const clockOut = document.getElementById('editClockOut').value;
-  const breakMin = document.getElementById('editBreakMin').value;
-  const note = document.getElementById('editNote').value;
+function submitEditRequest() {
+  var recordId = document.getElementById('editRecordId').value;
+  var clockIn = document.getElementById('editClockIn').value;
+  var clockOut = document.getElementById('editClockOut').value;
+  var breakMin = document.getElementById('editBreakMin').value;
+  var note = document.getElementById('editNote').value;
 
   if (!clockIn && !clockOut) {
-    const lang = localStorage.getItem('lang') || 'de';
+    var lang = localStorage.getItem('lang') || 'de';
     alert(lang === 'de' ? 'Bitte mindestens eine Zeit eingeben.' : 'Please enter at least one time.');
     return;
   }
 
-  const body = new URLSearchParams({
+  var body = new URLSearchParams({
     record_id: recordId,
     proposed_clock_in: clockIn,
     proposed_clock_out: clockOut,
@@ -591,58 +499,56 @@ async function submitEditRequest() {
     note: note,
   });
 
-  const resp = await fetch('/api/submit-correction/', {
+  fetch('/api/submit-correction/', {
     method: 'POST',
     headers: { 'X-CSRFToken': CSRF },
     body: body,
+  }).then(function(resp) { return resp.json(); }).then(function(data) {
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+      var lang = localStorage.getItem('lang') || 'de';
+      var msg = lang === 'de' ? 'Korrekturanfrage gesendet. HR wird benachrichtigt.' : 'Edit request submitted. HR will be notified.';
+      showToast(msg);
+      setTimeout(function() { location.reload(); }, 1500);
+    } else {
+      alert(data.error);
+    }
   });
-  const data = await resp.json();
-  if (data.ok) {
-    bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
-    const lang = localStorage.getItem('lang') || 'de';
-    const msg = lang === 'de' ? 'Korrekturanfrage gesendet. HR wird benachrichtigt.' : 'Edit request submitted. HR will be notified.';
-    showToast(msg);
-    setTimeout(() => location.reload(), 1500);
-  } else {
-    alert(data.error);
-  }
 }
 
-// Delete record with confirmation
 function confirmDeleteRecord(recordId) {
-  const lang = localStorage.getItem('lang') || 'de';
+  var lang = localStorage.getItem('lang') || 'de';
   showConfirm(
     lang === 'de' ? 'Löschanfrage senden?' : 'Send delete request?',
     lang === 'de' ? 'Dieser Eintrag wird nicht sofort gelöscht. HR muss die Löschung erst genehmigen.' : 'This entry will not be deleted immediately. HR must approve the deletion request first.',
-    () => doDeleteRecord(recordId)
+    function() { doDeleteRecord(recordId); }
   );
 }
 
-async function doDeleteRecord(recordId) {
-  const body = new URLSearchParams({ record_id: recordId });
-  const resp = await fetch('/api/delete-record/', {
+function doDeleteRecord(recordId) {
+  var body = new URLSearchParams({ record_id: recordId });
+  fetch('/api/delete-record/', {
     method: 'POST',
     headers: { 'X-CSRFToken': CSRF },
     body: body,
+  }).then(function(resp) { return resp.json(); }).then(function(data) {
+    if (data.ok) {
+      var lang = localStorage.getItem('lang') || 'de';
+      showToast(lang === 'de' ? 'Löschanfrage an HR gesendet.' : 'Delete request sent to HR.');
+      setTimeout(function() { location.reload(); }, 900);
+    } else {
+      alert(data.error);
+    }
   });
-  const data = await resp.json();
-  if (data.ok) {
-    const lang = localStorage.getItem('lang') || 'de';
-    showToast(lang === 'de' ? 'Löschanfrage an HR gesendet.' : 'Delete request sent to HR.');
-    setTimeout(() => location.reload(), 900);
-  } else {
-    alert(data.error);
-  }
 }
 
-// Simple toast notification
 function showToast(msg) {
-  const toast = document.createElement('div');
+  var toast = document.createElement('div');
   toast.className = 'position-fixed bottom-0 end-0 p-3';
   toast.style.zIndex = '3000';
-  toast.innerHTML = `<div class="alert alert-success alert-dismissible shadow">${msg}</div>`;
+  toast.innerHTML = '<div class="alert alert-success alert-dismissible shadow">' + msg + '</div>';
   document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
+  setTimeout(function() { toast.remove(); }, 3000);
 }
 </script>
 {% endblock %}

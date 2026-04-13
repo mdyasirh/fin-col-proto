@@ -14,10 +14,6 @@ from django.views.decorators.http import require_POST
 from .models import CorrectionRequest, DailyTimeRecord, EmployeeProfile, HRReview, Notification
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def is_hr(user):
     return user.groups.filter(name="HR").exists()
 
@@ -80,10 +76,6 @@ def _today_record(profile):
     return record
 
 
-# ---------------------------------------------------------------------------
-# Auth views
-# ---------------------------------------------------------------------------
-
 def login_view(request):
     error = ""
     if request.method == "POST":
@@ -95,7 +87,7 @@ def login_view(request):
             if is_hr(user):
                 return redirect("hr_dashboard")
             return redirect("punch_clock")
-        error = "Invalid credentials."
+        error = "Ungültige Anmeldedaten."
     return render(request, "login.html", {"error": error})
 
 
@@ -103,10 +95,6 @@ def logout_view(request):
     logout(request)
     return redirect("login")
 
-
-# ---------------------------------------------------------------------------
-# Notification API endpoints
-# ---------------------------------------------------------------------------
 
 @login_required
 def api_notifications(request):
@@ -185,10 +173,6 @@ def api_mark_all_notifications_read(request):
     return JsonResponse({"ok": True})
 
 
-# ---------------------------------------------------------------------------
-# Employee punch-clock page
-# ---------------------------------------------------------------------------
-
 @login_required
 def punch_clock_view(request):
     profile = request.user.employeeprofile
@@ -238,10 +222,6 @@ def punch_clock_view(request):
     }
     return render(request, "punch_clock.html", ctx)
 
-
-# ---------------------------------------------------------------------------
-# Employee AJAX endpoints
-# ---------------------------------------------------------------------------
 
 @login_required
 @require_POST
@@ -516,10 +496,6 @@ def api_delete_record(request):
     return JsonResponse({"ok": True, "request_id": correction.id})
 
 
-# ---------------------------------------------------------------------------
-# HR Dashboard
-# ---------------------------------------------------------------------------
-
 @login_required
 @user_passes_test(is_hr, login_url="/access-denied/")
 def hr_dashboard_view(request):
@@ -596,10 +572,6 @@ def access_denied_view(request):
     return render(request, "access_denied.html", status=403)
 
 
-# ---------------------------------------------------------------------------
-# HR Action endpoints
-# ---------------------------------------------------------------------------
-
 @login_required
 @user_passes_test(is_hr, login_url="/access-denied/")
 @require_POST
@@ -669,10 +641,6 @@ def api_acknowledge(request):
     review.save()
     return JsonResponse({"ok": True, "status": review.status})
 
-
-# ---------------------------------------------------------------------------
-# CSV Export
-# ---------------------------------------------------------------------------
 
 @login_required
 @user_passes_test(is_hr, login_url="/access-denied/")

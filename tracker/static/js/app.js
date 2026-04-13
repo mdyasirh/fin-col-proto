@@ -1,14 +1,6 @@
-/**
- * FitLife Studio – app.js
- * Handles language toggle (i18n) via data-attributes.
- * Default language is German (de).
- */
-
-// ---- Language Toggle (i18n) ----
-
 function applyLanguage(lang) {
-  document.querySelectorAll('[data-en][data-de]').forEach(el => {
-    const text = el.getAttribute('data-' + lang);
+  document.querySelectorAll('[data-en][data-de]').forEach(function(el) {
+    var text = el.getAttribute('data-' + lang);
     if (text !== null) {
       if ((el.tagName === 'INPUT' && el.type !== 'hidden') || el.tagName === 'TEXTAREA') {
         el.value = text;
@@ -17,47 +9,43 @@ function applyLanguage(lang) {
       }
     }
   });
-  // Update toggle button text to show current language
-  const btn = document.getElementById('langToggle');
+  var btn = document.getElementById('langToggle');
   if (btn) {
     btn.innerText = lang === 'de' ? 'DE | EN' : 'EN | DE';
   }
 }
 
 function toggleLanguage() {
-  const current = localStorage.getItem('lang') || 'de';
-  const next = current === 'en' ? 'de' : 'en';
+  var current = localStorage.getItem('lang') || 'de';
+  var next = current === 'en' ? 'de' : 'en';
   localStorage.setItem('lang', next);
   applyLanguage(next);
 }
 
-// Apply saved language on page load (default: German)
-document.addEventListener('DOMContentLoaded', () => {
-  const lang = localStorage.getItem('lang') || 'de';
+document.addEventListener('DOMContentLoaded', function() {
+  var lang = localStorage.getItem('lang') || 'de';
   applyLanguage(lang);
 });
 
-// ---- Notification System ----
+var NOTIFICATION_POLL_MS = 30000;
 
-const NOTIFICATION_POLL_INTERVAL_MS = 30000;
-
-async function fetchNotifications() {
-  try {
-    const resp = await fetch('/api/notifications/');
-    const data = await resp.json();
+function fetchNotifications() {
+  fetch('/api/notifications/').then(function(resp) {
+    return resp.json();
+  }).then(function(data) {
     if (data.ok) {
       updateNotificationBadge(data.count);
       return data.notifications;
     }
-  } catch (err) {
-    console.warn('Failed to fetch notifications:', err);
-  }
-  return [];
+    return [];
+  }).catch(function() {
+    return [];
+  });
 }
 
 function updateNotificationBadge(count) {
-  const badges = document.querySelectorAll('.notification-count');
-  badges.forEach(badge => {
+  var badges = document.querySelectorAll('.notification-count');
+  badges.forEach(function(badge) {
     if (count > 0) {
       badge.textContent = count;
       badge.style.display = 'inline-block';
@@ -67,24 +55,23 @@ function updateNotificationBadge(count) {
   });
 }
 
-async function markNotificationRead(notifId, csrf) {
-  const body = new URLSearchParams({ notification_id: notifId });
-  await fetch('/api/notifications/mark-read/', {
+function markNotificationRead(notifId, csrf) {
+  var body = new URLSearchParams({ notification_id: notifId });
+  fetch('/api/notifications/mark-read/', {
     method: 'POST',
     headers: { 'X-CSRFToken': csrf },
     body: body,
   });
 }
 
-async function markAllNotificationsRead(csrf) {
-  await fetch('/api/notifications/mark-all-read/', {
+function markAllNotificationsRead(csrf) {
+  fetch('/api/notifications/mark-all-read/', {
     method: 'POST',
     headers: { 'X-CSRFToken': csrf },
   });
 }
 
-// Poll for notifications every 30 seconds
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
   fetchNotifications();
-  setInterval(fetchNotifications, NOTIFICATION_POLL_INTERVAL_MS);
+  setInterval(fetchNotifications, NOTIFICATION_POLL_MS);
 });
