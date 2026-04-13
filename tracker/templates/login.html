@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+  <div class="col-md-5">
+    <div class="card shadow p-4">
+      <h3 class="text-center mb-4 text-light" data-en="Employee Login" data-de="Mitarbeiter-Login">Mitarbeiter-Login</h3>
+
+      {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" id="loginForm">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label text-light" data-en="Username" data-de="Benutzername">Benutzername</label>
+          <input type="text" name="username" class="form-control bg-dark text-light border-secondary" required autofocus>
+        </div>
+        <div class="mb-3">
+          <label class="form-label text-light" data-en="PIN / Password" data-de="PIN / Passwort">PIN / Passwort</label>
+          <input type="password" name="password" id="pinField" class="form-control bg-dark text-light border-secondary" required>
+        </div>
+
+        <button type="submit" class="btn btn-success w-100" data-en="Sign In" data-de="Anmelden">Anmelden</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

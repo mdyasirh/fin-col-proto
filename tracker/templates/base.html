@@ -1,0 +1,338 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FitLife Studio – Zeiterfassung</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+    .card { background-color: #16213e; border: 1px solid #0f3460; }
+    .table { color: #e0e0e0; }
+    .table-dark { --bs-table-bg: #16213e; --bs-table-border-color: #0f3460; }
+    .navbar { background-color: #0f3460 !important; }
+    .btn-lang { font-size: 0.85rem; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    .badge-pulse { animation: pulse 1.5s infinite; }
+    .notification-bell { position: relative; cursor: pointer; font-size: 1.3rem; }
+    .notification-count {
+      position: absolute; top: -6px; right: -8px;
+      background: #dc3545; color: #fff; border-radius: 50%;
+      font-size: 0.65rem; width: 18px; height: 18px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold;
+    }
+    .notification-dropdown {
+      position: absolute; right: 0; top: 100%; width: 320px;
+      background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4); z-index: 1050;
+      max-height: 400px; overflow-y: auto; display: none;
+    }
+    .notification-dropdown.show { display: block; }
+    .notification-item {
+      padding: 10px 14px; border-bottom: 1px solid #0f3460;
+      font-size: 0.85rem; cursor: pointer;
+    }
+    .notification-item:hover { background: #1a2744; }
+    .notification-item.unread { border-left: 3px solid #0d6efd; }
+    .notification-item .notif-time { font-size: 0.72rem; color: #888; }
+    .notif-type-badge {
+      font-size: 0.65rem;
+      border-radius: 10px;
+      padding: 2px 7px;
+      border: 1px solid transparent;
+      margin-left: 6px;
+    }
+    .notif-type-reminder { background: rgba(13, 202, 240, 0.2); border-color: #0dcaf0; color: #9eeaf9; }
+    .notif-type-correction { background: rgba(255, 193, 7, 0.2); border-color: #ffc107; color: #ffe69c; }
+    .notif-type-delete { background: rgba(220, 53, 69, 0.2); border-color: #dc3545; color: #f5c2c7; }
+    .notif-type-info { background: rgba(25, 135, 84, 0.2); border-color: #198754; color: #a3cfbb; }
+    .notification-modal-message { white-space: pre-line; }
+    .confirm-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7); z-index: 2000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .confirm-box {
+      background: #16213e; border: 1px solid #0f3460; border-radius: 12px;
+      padding: 30px; max-width: 400px; width: 90%; text-align: center;
+    }
+  </style>
+</head>
+<body class="bg-dark text-light">
+  <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold" href="/">🏋️ FitLife Studio</a>
+      <div class="d-flex align-items-center gap-3">
+        <button id="langToggle" class="btn btn-outline-light btn-sm btn-lang" onclick="toggleLanguage()">DE | EN</button>
+
+        {% if user.is_authenticated %}
+          <!-- Notification Bell -->
+          <div class="notification-bell" id="notifBell" onclick="toggleNotifDropdown()">
+            🔔
+            <span class="notification-count" id="notifBadge" style="display:none;">0</span>
+            <div class="notification-dropdown" id="notifDropdown">
+              <div class="p-2 border-bottom border-secondary d-flex justify-content-between align-items-center">
+                <strong class="small" data-en="Notifications" data-de="Benachrichtigungen">Benachrichtigungen</strong>
+                <button class="btn btn-sm btn-link text-info p-0" onclick="event.stopPropagation(); doMarkAllRead()" data-en="Mark all read" data-de="Alle gelesen">Alle gelesen</button>
+              </div>
+              <div id="notifList">
+                <div class="p-3 text-center text-muted small" data-en="No notifications" data-de="Keine Benachrichtigungen">Keine Benachrichtigungen</div>
+              </div>
+            </div>
+          </div>
+
+          <span class="text-light small" data-en="Hello, {{ user.get_full_name|default:user.username }}" data-de="Hallo, {{ user.get_full_name|default:user.username }}">Hallo, {{ user.get_full_name|default:user.username }}</span>
+          <a href="{% url 'logout' %}" class="btn btn-outline-danger btn-sm" data-en="Logout" data-de="Abmelden">Abmelden</a>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+
+  <div class="modal fade" id="notificationDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content bg-dark text-light border-secondary">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title" id="notificationModalTitle">Benachrichtigung</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p id="notificationModalMessage" class="notification-modal-message mb-0"></p>
+        </div>
+        <div class="modal-footer border-secondary" id="notificationModalActions"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{% static 'js/app.js' %}"></script>
+  <script>
+    // Notification dropdown logic
+    function toggleNotifDropdown() {
+      const dd = document.getElementById('notifDropdown');
+      dd.classList.toggle('show');
+      if (dd.classList.contains('show')) {
+        loadNotifications();
+      }
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      const bell = document.getElementById('notifBell');
+      const dd = document.getElementById('notifDropdown');
+      if (bell && dd && !bell.contains(e.target)) {
+        dd.classList.remove('show');
+      }
+    });
+
+    let currentNotifications = [];
+    let notificationModalInstance = null;
+
+    function getCsrfToken() {
+      return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+    }
+
+    function getLang() {
+      return localStorage.getItem('lang') || 'de';
+    }
+
+    function hideNotificationFromUi(notifId) {
+      currentNotifications = currentNotifications.filter(n => n.id !== notifId);
+      const card = document.querySelector(`.notification-item[data-notif-id="${notifId}"]`);
+      if (card) card.remove();
+      updateNotificationBadge(currentNotifications.length);
+      const list = document.getElementById('notifList');
+      if (currentNotifications.length === 0) {
+        const lang = getLang();
+        list.innerHTML = `<div class="p-3 text-center text-muted small">${lang === 'de' ? 'Keine Benachrichtigungen' : 'No notifications'}</div>`;
+      }
+    }
+
+    function buildCorrectionMessage(notif) {
+      const c = notif.correction || {};
+      const lang = getLang();
+      const isDelete = Boolean(c.is_delete_request);
+      if (isDelete) {
+        const dateLine = lang === 'de' ? 'Datum' : 'Date';
+        const employeeLine = lang === 'de' ? 'Mitarbeiter' : 'Employee';
+        const noteLine = lang === 'de' ? 'Hinweis' : 'Note';
+        return [
+          lang === 'de' ? 'Löschanfrage für Zeiteintrag' : 'Delete request for time entry',
+          '',
+          `${dateLine}: ${c.record_date || '-'}`,
+          `${employeeLine}: ${c.employee || '-'}`,
+          `${noteLine}: ${c.note || '-'}`,
+        ].join('\n');
+      }
+      const dateLine = lang === 'de' ? 'Datum' : 'Date';
+      const inLine = lang === 'de' ? 'Vorschlag Kommen' : 'Requested clock-in';
+      const outLine = lang === 'de' ? 'Vorschlag Gehen' : 'Requested clock-out';
+      const breakLine = lang === 'de' ? 'Vorschlag Pause' : 'Requested break';
+      const noteLine = lang === 'de' ? 'Notiz' : 'Note';
+      return [
+        notif.message,
+        '',
+        `${dateLine}: ${c.record_date || '-'}`,
+        `${inLine}: ${c.proposed_clock_in || '-'}`,
+        `${outLine}: ${c.proposed_clock_out || '-'}`,
+        `${breakLine}: ${c.proposed_break_minutes !== null && c.proposed_break_minutes !== undefined ? c.proposed_break_minutes + ' min' : '-'}`,
+        `${noteLine}: ${c.note || '-'}`,
+      ].join('\n');
+    }
+
+    function openNotificationModal(notifId) {
+      const notif = currentNotifications.find(n => n.id === notifId);
+      if (!notif) return;
+      const lang = getLang();
+      const titleEl = document.getElementById('notificationModalTitle');
+      const msgEl = document.getElementById('notificationModalMessage');
+      const actionsEl = document.getElementById('notificationModalActions');
+      const isHrCorrection = notif.notification_type === 'EDIT_REQUEST' || notif.notification_type === 'CORRECTION';
+      const isDeleteRequest = Boolean(notif.correction && notif.correction.is_delete_request);
+      const defaultTitle = notif.title || (lang === 'de' ? 'Benachrichtigung' : 'Notification');
+      titleEl.textContent = notif.title;
+      msgEl.textContent = isHrCorrection
+        ? buildCorrectionMessage(notif)
+        : notif.message;
+      if (isHrCorrection && isDeleteRequest) {
+        titleEl.textContent = lang === 'de' ? 'Löschanfrage' : 'Delete Request';
+      } else {
+        titleEl.textContent = defaultTitle;
+      }
+      actionsEl.innerHTML = '';
+
+      if (isHrCorrection) {
+        actionsEl.innerHTML = `
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">${lang === 'de' ? 'Abbrechen' : 'Cancel'}</button>
+          <button type="button" class="btn btn-danger" onclick="handleCorrectionDecision(${notif.id}, 'REJECT')">${lang === 'de' ? 'Ablehnen' : 'Reject'}</button>
+          <button type="button" class="btn btn-success" onclick="handleCorrectionDecision(${notif.id}, 'APPROVE')">${lang === 'de' ? 'Genehmigen' : 'Approve'}</button>
+        `;
+      } else {
+        actionsEl.innerHTML = `
+          <button type="button" class="btn btn-primary" onclick="markRead(${notif.id}, true)">${lang === 'de' ? 'OK / Bestätigen' : 'Acknowledge / OK'}</button>
+        `;
+      }
+
+      if (!notificationModalInstance) {
+        notificationModalInstance = new bootstrap.Modal(document.getElementById('notificationDetailModal'));
+      }
+      notificationModalInstance.show();
+    }
+
+    function getNotifBadgeMeta(notif) {
+      const lang = getLang();
+      const isHrCorrection = notif.notification_type === 'EDIT_REQUEST' || notif.notification_type === 'CORRECTION';
+      const isDeleteRequest = Boolean(notif.correction && notif.correction.is_delete_request);
+      if (isHrCorrection && isDeleteRequest) {
+        return {
+          label: lang === 'de' ? 'Löschung' : 'Delete',
+          cls: 'notif-type-delete',
+        };
+      }
+      if (isHrCorrection) {
+        return {
+          label: lang === 'de' ? 'Korrektur' : 'Correction',
+          cls: 'notif-type-correction',
+        };
+      }
+      if (notif.notification_type === 'REMINDER') {
+        return {
+          label: lang === 'de' ? 'Erinnerung' : 'Reminder',
+          cls: 'notif-type-reminder',
+        };
+      }
+      return {
+        label: lang === 'de' ? 'Info' : 'Info',
+        cls: 'notif-type-info',
+      };
+    }
+
+    async function loadNotifications() {
+      try {
+        const resp = await fetch('/api/notifications/');
+        const data = await resp.json();
+        if (!data.ok) return;
+        currentNotifications = data.notifications || [];
+
+        const list = document.getElementById('notifList');
+        const lang = getLang();
+
+        if (currentNotifications.length === 0) {
+          const emptyMsg = lang === 'de' ? 'Keine Benachrichtigungen' : 'No notifications';
+          list.innerHTML = `<div class="p-3 text-center text-muted small">${emptyMsg}</div>`;
+          return;
+        }
+
+        list.innerHTML = currentNotifications.map(n => {
+          const date = new Date(n.created_at);
+          const badge = getNotifBadgeMeta(n);
+          const timeStr = date.toLocaleString(lang === 'de' ? 'de-DE' : 'en-GB', {
+            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+          });
+          return `
+            <div class="notification-item ${n.is_read ? '' : 'unread'}" data-notif-id="${n.id}" onclick="event.stopPropagation(); openNotificationModal(${n.id})">
+              <div class="fw-bold">${n.title}<span class="notif-type-badge ${badge.cls}">${badge.label}</span></div>
+              <div class="text-muted small">${n.message}</div>
+              <div class="notif-time">${timeStr}</div>
+            </div>`;
+        }).join('');
+      } catch (err) {
+        console.warn('Failed to load notifications:', err);
+      }
+    }
+
+    async function markRead(notifId, closeModal = false) {
+      const csrf = getCsrfToken();
+      const body = new URLSearchParams({ notification_id: notifId });
+      await fetch('/api/notifications/mark-read/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf },
+        body: body,
+      });
+      hideNotificationFromUi(notifId);
+      if (closeModal && notificationModalInstance) {
+        notificationModalInstance.hide();
+      }
+      fetchNotifications();
+    }
+
+    async function handleCorrectionDecision(notifId, decision) {
+      const csrf = getCsrfToken();
+      const body = new URLSearchParams({
+        notification_id: notifId,
+        decision: decision,
+      });
+      const resp = await fetch('/api/approve-correction/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf },
+        body: body,
+      });
+      const data = await resp.json();
+      if (!data.ok) {
+        alert(data.error || 'Failed to process correction.');
+        return;
+      }
+      hideNotificationFromUi(notifId);
+      if (notificationModalInstance) notificationModalInstance.hide();
+      fetchNotifications();
+    }
+
+    async function doMarkAllRead() {
+      const csrf = getCsrfToken();
+      await fetch('/api/notifications/mark-all-read/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf },
+      });
+      currentNotifications = [];
+      fetchNotifications();
+      loadNotifications();
+    }
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
