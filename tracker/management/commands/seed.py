@@ -1,7 +1,3 @@
-"""
-Management command to seed the database with demo data.
-Creates groups, users, employee profiles, and historical time records.
-"""
 import datetime
 import random
 

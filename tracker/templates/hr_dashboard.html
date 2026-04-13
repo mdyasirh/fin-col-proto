@@ -4,7 +4,6 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 data-en="HR Dashboard" data-de="HR-Monatsübersicht">HR-Monatsübersicht</h2>
   <div class="d-flex align-items-center gap-2">
-    <!-- Month/Year Selector -->
     <form method="get" class="d-flex align-items-center gap-2" id="monthForm">
       <select name="month" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:auto;" onchange="document.getElementById('monthForm').submit()">
         {% for num, label in month_choices %}
@@ -47,23 +46,30 @@
         </td>
         <td>
           <span id="reviewStatus-{{ emp.hr_review.pk }}"
-                class="badge {% if emp.hr_review.status == 'REVIEWED' %}bg-success{% elif emp.hr_review.status == 'REMINDER_SENT' %}bg-info{% else %}bg-secondary{% endif %}">
-            {{ emp.hr_review.status }}
+                class="badge {% if emp.hr_review.status == 'REVIEWED' %}bg-success{% elif emp.hr_review.status == 'REMINDER_SENT' %}bg-info{% else %}bg-secondary{% endif %}"
+                data-status="{{ emp.hr_review.status }}"
+                data-en="{% if emp.hr_review.status == 'REVIEWED' %}Reviewed{% elif emp.hr_review.status == 'REMINDER_SENT' %}Reminder Sent{% else %}Pending{% endif %}"
+                data-de="{% if emp.hr_review.status == 'REVIEWED' %}Geprüft{% elif emp.hr_review.status == 'REMINDER_SENT' %}Erinnerung gesendet{% else %}Ausstehend{% endif %}">
+            {% if emp.hr_review.status == 'REVIEWED' %}Geprüft{% elif emp.hr_review.status == 'REMINDER_SENT' %}Erinnerung gesendet{% else %}Ausstehend{% endif %}
           </span>
         </td>
         <td>
           <button id="reminderBtn-{{ emp.hr_review.pk }}"
-                  class="btn btn-sm {% if emp.hr_review.status == 'REMINDER_SENT' %}btn-secondary disabled{% else %}btn-outline-warning{% endif %}"
-                  onclick="event.stopPropagation(); {% if emp.hr_review.status != 'REMINDER_SENT' %}openReminderModal({{ emp.hr_review.pk }}, '{{ emp.profile }}'){% endif %}"
-                  data-en="{% if emp.hr_review.status == 'REMINDER_SENT' %}Reminder Sent{% else %}Send Reminder{% endif %}"
-                  data-de="{% if emp.hr_review.status == 'REMINDER_SENT' %}Erinnerung gesendet{% else %}Erinnerung senden{% endif %}">
-            {% if emp.hr_review.status == 'REMINDER_SENT' %}Erinnerung gesendet{% else %}Erinnerung senden{% endif %}
+                  class="btn btn-sm {% if emp.hr_review.status == 'REMINDER_SENT' or emp.hr_review.status == 'REVIEWED' %}btn-secondary disabled{% else %}btn-outline-warning{% endif %}"
+                  onclick="event.stopPropagation(); {% if emp.hr_review.status != 'REMINDER_SENT' and emp.hr_review.status != 'REVIEWED' %}openReminderModal({{ emp.hr_review.pk }}, '{{ emp.profile }}'){% endif %}"
+                  data-en="{% if emp.hr_review.status == 'REMINDER_SENT' %}Reminder Sent{% elif emp.hr_review.status == 'REVIEWED' %}Reminder Sent{% else %}Send Reminder{% endif %}"
+                  data-de="{% if emp.hr_review.status == 'REMINDER_SENT' %}Erinnerung gesendet{% elif emp.hr_review.status == 'REVIEWED' %}Erinnerung gesendet{% else %}Erinnerung senden{% endif %}">
+            {% if emp.hr_review.status == 'REMINDER_SENT' or emp.hr_review.status == 'REVIEWED' %}Erinnerung gesendet{% else %}Erinnerung senden{% endif %}
           </button>
-          <button class="btn btn-sm btn-outline-success" onclick="event.stopPropagation(); doAcknowledge({{ emp.hr_review.pk }})"
-                  data-en="Acknowledge" data-de="Bestätigen">Bestätigen</button>
+          <button id="ackBtn-{{ emp.hr_review.pk }}"
+                  class="btn btn-sm {% if emp.hr_review.status == 'REVIEWED' or emp.hr_review.status == 'REMINDER_SENT' %}btn-secondary disabled{% else %}btn-outline-success{% endif %}"
+                  onclick="event.stopPropagation(); {% if emp.hr_review.status != 'REVIEWED' and emp.hr_review.status != 'REMINDER_SENT' %}doAcknowledge({{ emp.hr_review.pk }}){% endif %}"
+                  data-en="{% if emp.hr_review.status == 'REVIEWED' %}Reviewed{% else %}Acknowledge{% endif %}"
+                  data-de="{% if emp.hr_review.status == 'REVIEWED' %}Geprüft{% else %}Bestätigen{% endif %}">
+            {% if emp.hr_review.status == 'REVIEWED' %}Geprüft{% else %}Bestätigen{% endif %}
+          </button>
         </td>
       </tr>
-      <!-- Expandable Detail Row -->
       <tr class="collapse" id="detail-{{ emp.profile.pk }}">
         <td colspan="8" class="p-0">
           <div class="p-3">
@@ -92,7 +98,9 @@
                   </td>
                   <td>{{ rec.total_break_minutes }}</td>
                   <td>{{ rec.net_hours|default:"--" }}</td>
-                  <td>{{ rec.status }}</td>
+                  <td>
+                    <span data-en="{{ rec.status }}" data-de="{% if rec.status == 'CLOCKED_OUT' %}Ausgestempelt{% elif rec.status == 'WORKING' %}Arbeitend{% elif rec.status == 'ON_BREAK' %}In Pause{% elif rec.status == 'MISSING_CLOCKOUT' %}Fehlende Ausstempelung{% else %}{{ rec.status }}{% endif %}">{% if rec.status == 'CLOCKED_OUT' %}Ausgestempelt{% elif rec.status == 'WORKING' %}Arbeitend{% elif rec.status == 'ON_BREAK' %}In Pause{% elif rec.status == 'MISSING_CLOCKOUT' %}Fehlende Ausstempelung{% else %}{{ rec.status }}{% endif %}</span>
+                  </td>
                 </tr>
                 {% empty %}
                 <tr>
@@ -109,7 +117,6 @@
   </table>
 </div>
 
-<!-- Reminder Modal -->
 <div class="modal fade" id="reminderModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content bg-dark text-light">
@@ -146,74 +153,99 @@ const CSRF = '{{ csrf_token }}';
 function openReminderModal(reviewId, name) {
   document.getElementById('reminderReviewId').value = reviewId;
   document.getElementById('reminderTo').value = name;
-  // Reset message to default
-  const lang = localStorage.getItem('lang') || 'de';
-  const textarea = document.getElementById('reminderMessage');
+  var lang = localStorage.getItem('lang') || 'de';
+  var textarea = document.getElementById('reminderMessage');
   textarea.value = lang === 'de'
     ? 'Bitte überprüfen und korrigieren Sie Ihre Zeiteinträge für diesen Monat.'
     : 'Please review and correct your time entries for this month.';
   new bootstrap.Modal(document.getElementById('reminderModal')).show();
 }
 
-async function doSendReminder() {
-  const reviewId = document.getElementById('reminderReviewId').value;
-  const message = document.getElementById('reminderMessage').value;
-  const body = new URLSearchParams({ review_id: reviewId, message: message });
-  const resp = await fetch('/api/send-reminder/', {
+function doSendReminder() {
+  var reviewId = document.getElementById('reminderReviewId').value;
+  var message = document.getElementById('reminderMessage').value;
+  var body = new URLSearchParams({ review_id: reviewId, message: message });
+  fetch('/api/send-reminder/', {
     method: 'POST',
     headers: { 'X-CSRFToken': CSRF },
     body: body,
+  }).then(function(resp) { return resp.json(); }).then(function(data) {
+    if (data.ok) {
+      var badge = document.getElementById('reviewStatus-' + reviewId);
+      var lang = localStorage.getItem('lang') || 'de';
+      badge.textContent = lang === 'de' ? 'Erinnerung gesendet' : 'Reminder Sent';
+      badge.className = 'badge bg-info';
+      badge.setAttribute('data-status', 'REMINDER_SENT');
+      badge.setAttribute('data-de', 'Erinnerung gesendet');
+      badge.setAttribute('data-en', 'Reminder Sent');
+      var reminderBtn = document.getElementById('reminderBtn-' + reviewId);
+      if (reminderBtn) {
+        reminderBtn.className = 'btn btn-sm btn-secondary disabled';
+        reminderBtn.textContent = lang === 'de' ? 'Erinnerung gesendet' : 'Reminder Sent';
+        reminderBtn.onclick = function(e) { e.stopPropagation(); };
+        reminderBtn.setAttribute('data-de', 'Erinnerung gesendet');
+        reminderBtn.setAttribute('data-en', 'Reminder Sent');
+      }
+      var ackBtn = document.getElementById('ackBtn-' + reviewId);
+      if (ackBtn) {
+        ackBtn.className = 'btn btn-sm btn-secondary disabled';
+        ackBtn.onclick = function(e) { e.stopPropagation(); };
+      }
+      bootstrap.Modal.getInstance(document.getElementById('reminderModal')).hide();
+      showToast(lang === 'de' ? 'Erinnerung gesendet.' : 'Reminder sent.');
+      if (data.warning) {
+        showToast(data.warning);
+      }
+    } else {
+      alert(data.error);
+    }
   });
-  const data = await resp.json();
-  if (data.ok) {
-    const badge = document.getElementById('reviewStatus-' + reviewId);
-    badge.textContent = data.status;
-    badge.className = 'badge bg-info';
-    const reminderBtn = document.getElementById('reminderBtn-' + reviewId);
-    if (reminderBtn) {
-      const lang = localStorage.getItem('lang') || 'de';
-      reminderBtn.className = 'btn btn-sm btn-secondary disabled';
-      reminderBtn.textContent = lang === 'de' ? 'Erinnerung gesendet' : 'Reminder sent';
-      reminderBtn.onclick = (e) => e.stopPropagation();
-      reminderBtn.setAttribute('data-de', 'Erinnerung gesendet');
-      reminderBtn.setAttribute('data-en', 'Reminder Sent');
-    }
-    bootstrap.Modal.getInstance(document.getElementById('reminderModal')).hide();
-    const lang = localStorage.getItem('lang') || 'de';
-    const okMsg = lang === 'de' ? 'Erinnerung gesendet.' : 'Reminder sent.';
-    showToast(okMsg);
-    if (data.warning) {
-      showToast(data.warning);
-    }
-  } else {
-    alert(data.error);
-  }
 }
 
-async function doAcknowledge(reviewId) {
-  const body = new URLSearchParams({ review_id: reviewId });
-  const resp = await fetch('/api/acknowledge/', {
+function doAcknowledge(reviewId) {
+  var body = new URLSearchParams({ review_id: reviewId });
+  fetch('/api/acknowledge/', {
     method: 'POST',
     headers: { 'X-CSRFToken': CSRF },
     body: body,
+  }).then(function(resp) { return resp.json(); }).then(function(data) {
+    if (data.ok) {
+      var lang = localStorage.getItem('lang') || 'de';
+      var badge = document.getElementById('reviewStatus-' + reviewId);
+      badge.textContent = lang === 'de' ? 'Geprüft' : 'Reviewed';
+      badge.className = 'badge bg-success';
+      badge.setAttribute('data-status', 'REVIEWED');
+      badge.setAttribute('data-de', 'Geprüft');
+      badge.setAttribute('data-en', 'Reviewed');
+      var ackBtn = document.getElementById('ackBtn-' + reviewId);
+      if (ackBtn) {
+        ackBtn.className = 'btn btn-sm btn-secondary disabled';
+        ackBtn.textContent = lang === 'de' ? 'Geprüft' : 'Reviewed';
+        ackBtn.onclick = function(e) { e.stopPropagation(); };
+        ackBtn.setAttribute('data-de', 'Geprüft');
+        ackBtn.setAttribute('data-en', 'Reviewed');
+      }
+      var reminderBtn = document.getElementById('reminderBtn-' + reviewId);
+      if (reminderBtn) {
+        reminderBtn.className = 'btn btn-sm btn-secondary disabled';
+        reminderBtn.textContent = lang === 'de' ? 'Erinnerung gesendet' : 'Reminder Sent';
+        reminderBtn.onclick = function(e) { e.stopPropagation(); };
+        reminderBtn.setAttribute('data-de', 'Erinnerung gesendet');
+        reminderBtn.setAttribute('data-en', 'Reminder Sent');
+      }
+    } else {
+      alert(data.error);
+    }
   });
-  const data = await resp.json();
-  if (data.ok) {
-    const badge = document.getElementById('reviewStatus-' + reviewId);
-    badge.textContent = data.status;
-    badge.className = 'badge bg-success';
-  } else {
-    alert(data.error);
-  }
 }
 
 function showToast(msg) {
-  const toast = document.createElement('div');
+  var toast = document.createElement('div');
   toast.className = 'position-fixed bottom-0 end-0 p-3';
   toast.style.zIndex = '3000';
-  toast.innerHTML = `<div class="alert alert-success alert-dismissible shadow">${msg}</div>`;
+  toast.innerHTML = '<div class="alert alert-success alert-dismissible shadow">' + msg + '</div>';
   document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
+  setTimeout(function() { toast.remove(); }, 3000);
 }
 </script>
 {% endblock %}

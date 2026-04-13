@@ -1,5 +1,3 @@
-"""Django settings for FitLife Studio Time Tracking project."""
-
 import os
 from pathlib import Path
 
